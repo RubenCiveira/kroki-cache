@@ -1,17 +1,18 @@
 <?php
+$host = 'https://kroki.io/';
 $cache = __DIR__.'/cache/';
-eliminar_archivos_antiguos($cache, 2);
+$maximo_archivos_cache = 100;
+eliminar_archivos_antiguos($cache, $maximo_archivos_cache);
 
 $path = $_SERVER['QUERY_STRING'];
 if( 'POST'== $_SERVER['REQUEST_METHOD'] ) {
     $postdata = file_get_contents('php://input');
-    load($cache, $path, $postdata);
+    load($host, $cache, $path, $postdata);
 } else {
-    load($cache, $path, '');
+    load($host, $cache, $path, '');
 }
 
-function load($cache, $path, $body) {
-    $host = 'https://kroki.io/';
+function load($host, $cache, $path, $body) {
     $file = $path;
     if( $body ) {
         $file .= base64_encode($body);
@@ -43,15 +44,39 @@ function load($cache, $path, $body) {
     }
 }
 
-function eliminar_archivos_antiguos($directorio, $max_archivos) {
-    $archivos = glob($directorio . '/*');
-    if (count($archivos) > $max_archivos) {
-        // ordena los archivos por fecha de modificación
-        array_multisort(array_map('filemtime', $archivos), SORT_ASC, $archivos);
-        // elimina el archivo más antiguo
-        unlink($archivos[0]);
-        // llama de nuevo a la función para eliminar el siguiente archivo más antiguo
-        eliminar_archivos_antiguos($directorio, $max_archivos);
+function eliminar_archivos_antiguos($directorio, $max_ficheros) {
+    // crea una instancia del iterador recursivo para el directorio
+    $iterador = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($directorio),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    
+    // crea un array para almacenar los detalles de los archivos
+    $archivos = array();
+    
+    // recorre los archivos y agrega detalles al array
+    foreach ($iterador as $archivo) {
+        if ($archivo->isFile()) {
+            $archivos[] = array(
+                'ruta' => $archivo->getPathname(),
+                'fecha' => $archivo->getMTime()
+            );
+        }
+    }
+    
+    // ordena los archivos por fecha (más antiguo a más reciente)
+    usort($archivos, function($a, $b) {
+        return $a['fecha'] - $b['fecha'];
+    });
+    
+    // elimina los archivos más antiguos hasta que quede el número máximo de archivos
+    while (count($archivos) > $max_ficheros) {
+        $archivo = array_shift($archivos);
+        if (is_writable($archivo['ruta'])) {
+            unlink($archivo['ruta']);
+        } else {
+            // manejar el error (no se puede borrar el archivo)
+        }
     }
 }
 
